@@ -2,25 +2,19 @@
 
 Delhi's commute, sorted.
 
-Delhi Transit is a production-ready open-source journey planner built to help people move across Delhi without juggling multiple apps and scattered maps. It combines bus, metro, and walking transfers into one simple route-planning experience.
+Delhi Transit is a production-ready route planner that helps people move across Delhi by combining metro, bus, and walking transfers into one simple journey-planning tool.
 
 Live demo: https://delhi-route-recommender--sejalpandey30.replit.app
 
----
+## What it does
 
-## ✨ What it does
+- Finds the fastest multimodal route between any two stops or stations
+- Combines metro, bus, and walking into one trip
+- Shows boarding/alighting stops, transfer details, and route summary
+- Displays the route on an interactive map
+- Saves recent searches and favorite journeys
 
-- Plans routes across Delhi's metro and bus network
-- Mixes bus, metro, and walking into a single trip
-- Shows route details, transfer counts, and travel time
-- Displays the journey on an interactive map
-- Remembers recent searches and saves favorite routes
-
----
-
-## 🚀 Quick start
-
-### Local setup
+## Quick start
 
 ```bash
 git clone https://github.com/sejalpandey30/delhiRouteRecommender.git
@@ -29,38 +23,20 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open:
+Open: http://localhost:5050
 
-```text
-http://localhost:5050
-```
+## Why this project
 
-The project includes a prebuilt network cache, so it runs immediately without rebuilding GTFS data.
+Delhi's public transport is vast and often fragmented. This project brings it together in one interface so users can plan a trip without checking multiple systems or maps.
 
----
+## Tech stack
 
-## 📍 How to use
+- Flask for the backend and API
+- SQLite for search history and saved routes
+- Leaflet + OpenStreetMap for the map view
+- RAPTOR-based routing engine for efficient multimodal route finding
 
-1. Enter an origin stop or station.
-2. Enter a destination.
-3. Pick a departure time.
-4. Click the route button.
-5. Review the trip, map, and transfer details.
-
----
-
-## 🧠 Tech behind it
-
-This project uses a RAPTOR-based routing engine for efficient multimodal planning.
-
-- GTFS data is processed into a compact transit network
-- Route patterns are grouped to reduce unnecessary computation
-- Walking transfers are added between nearby stops
-- The system reconstructs the best available journey
-
----
-
-## 🏗️ Project structure
+## Project structure
 
 ```text
 .
@@ -79,28 +55,13 @@ This project uses a RAPTOR-based routing engine for efficient multimodal plannin
 └── LICENSE
 ```
 
----
+## Notes
 
-## ⚠️ Notes
+- Walking transfers are estimated rather than street-network exact.
+- The app uses static schedule data, not live delay feeds.
+- It currently optimizes for fastest route rather than fare or minimum transfers.
 
-- Walking transfers are estimated using straight-line distance, not full street-network routing.
-- The planner uses static schedule data, not live transit disruptions.
-- Fare calculation is not included yet.
-- It currently optimizes for the fastest route.
-
----
-
-## 🛠️ Future improvements
-
-- Multi-criteria routing
-- Real-time transit updates
-- Better walking transfer models
-- Day-of-week service filtering
-- Fare integration
-
----
-
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome.
 
@@ -109,9 +70,7 @@ Contributions are welcome.
 3. Commit your changes
 4. Open a pull request
 
----
-
-## 📚 References
+## References
 
 - RAPTOR paper: https://research.microsoft.com/en-us/um/people/seidenbe/papers/raptor_alenex.pdf
 - GTFS: https://gtfs.org/
@@ -120,12 +79,6 @@ Contributions are welcome.
 
 ---
 
-## 📄 License
+Built for better daily commutes in Delhi.
 
-MIT License
-
----
-
-## 👤 Author
-
-Sejal Pandey
+© 2026 Sejal Pandey
