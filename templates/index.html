@@ -147,7 +147,7 @@ html, body {
   scrollbar-width: thin;
 }
 
-/* ── Search Box ────────────────────────────────────────────────────────── */
+/* ── Search Box ──────────────────────────────────────────────────────────[...]
 .search-card {
   background: #ffffff;
   border: 1px solid var(--border);
@@ -384,7 +384,9 @@ html, body {
 .route-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
 .btn-save-fav {
@@ -407,6 +409,28 @@ html, body {
   background: #fefce8;
   color: #a16207;
   border-color: #fde047;
+}
+
+.btn-download-route {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: #ffffff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.btn-download-route:hover {
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #3b82f6;
 }
 
 .journey-timeline {
@@ -712,7 +736,7 @@ html, body {
   border: 2.5px solid white;
 }
 
-/* ── Responsive ────────────────────────────────────────────────────────── */
+/* ── Responsive ──────────────────────────────────────────────────────────[...]
 @media (max-width: 900px) {
   .app-container {
     flex-direction: column;
@@ -855,9 +879,9 @@ html, body {
 </script>
 
 <script>
-/* ═══════════════════════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════[...]
    1. MAP INITIALIZATION & TILE PROVIDERS
-   ═══════════════════════════════════════════════════════════════════════════ */
+   ════════════════════════════════════════════════════════════════[...]
 const DELHI_CENTER = [28.6139, 77.2090];
 const map = L.map('map', {
   center: DELHI_CENTER,
@@ -961,11 +985,12 @@ function renderRouteOnMap(planData) {
   refreshMapSize();
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════[...]
    2. AUTOCOMPLETE & INPUT MANAGEMENT
-   ═══════════════════════════════════════════════════════════════════════════ */
+   ════════════════════════════════════════════════════════════════[...]
 let selectedOrigin = null;
 let selectedDest = null;
+let lastPlanData = null;
 
 function debounce(fn, delay = 200) {
   let timer;
@@ -998,320 +1023,321 @@ function bindAutocomplete(inputId, dropdownId, onSelect) {
 
     dropdown.innerHTML = results.map(item => `
       <div class="dropdown-item" data-idx="${item.stop_idx}" data-name="${item.name.replace(/"/g, '&quot;')}">
-        <span class="mode-badge ${item.mode}">${item.mode}</span>
         <span>${item.name}</span>
+        <span class="mode-badge ${item.mode.toLowerCase()}">${item.mode}</span>
       </div>
     `).join('');
-
     dropdown.classList.add('active');
-
-    dropdown.querySelectorAll('.dropdown-item').forEach(el => {
-      el.addEventListener('click', () => {
-        const name = el.dataset.name;
-        const idx = parseInt(el.dataset.idx, 10);
-        input.value = name;
-        onSelect({ stop_idx: idx, name: name });
-        dropdown.classList.remove('active');
-      });
-    });
-  }, 180);
-
-  input.addEventListener('input', () => {
-    onSelect(null);
-    fetchAndShow();
   });
-  input.addEventListener('focus', fetchAndShow);
+
+  input.addEventListener('input', fetchAndShow);
+
+  dropdown.addEventListener('click', (e) => {
+    const item = e.target.closest('.dropdown-item');
+    if (item) {
+      const idx = parseInt(item.dataset.idx);
+      const name = item.dataset.name;
+      input.value = name;
+      dropdown.classList.remove('active');
+      onSelect({ stop_idx: idx, name });
+    }
+  });
 
   document.addEventListener('click', (e) => {
-    if (!dropdown.contains(e.target) && e.target !== input) {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) {
       dropdown.classList.remove('active');
     }
   });
 }
 
-bindAutocomplete('origin', 'origin-dd', (stop) => { selectedOrigin = stop; });
-bindAutocomplete('dest', 'dest-dd', (stop) => { selectedDest = stop; });
-
-document.getElementById('btn-swap').addEventListener('click', () => {
-  const origInput = document.getElementById('origin');
-  const destInput = document.getElementById('dest');
-  const tempVal = origInput.value;
-  origInput.value = destInput.value;
-  destInput.value = tempVal;
-
-  const tempStop = selectedOrigin;
-  selectedOrigin = selectedDest;
-  selectedDest = tempStop;
+bindAutocomplete('origin', 'origin-dd', (item) => {
+  selectedOrigin = item;
 });
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   3. ROUTE PLANNING & RENDERING
-   ═══════════════════════════════════════════════════════════════════════════ */
-function showStatus(msg, type = 'info') {
-  const statusEl = document.getElementById('status-msg');
-  if (!msg) {
-    statusEl.classList.remove('active');
+bindAutocomplete('dest', 'dest-dd', (item) => {
+  selectedDest = item;
+});
+
+document.getElementById('btn-swap').addEventListener('click', () => {
+  [selectedOrigin, selectedDest] = [selectedDest, selectedOrigin];
+  document.getElementById('origin').value = selectedOrigin?.name || '';
+  document.getElementById('dest').value = selectedDest?.name || '';
+});
+
+/* ════════════════════════════════════════════════════════════════[...]
+   3. ROUTE PLANNING & RESULT RENDERING
+   ════════════════════════════════════════════════════════════════[...]
+async function planRoute() {
+  if (!selectedOrigin || !selectedDest) {
+    showStatus('Please select both origin and destination', 'error');
     return;
   }
-  statusEl.textContent = msg;
-  statusEl.className = `status-msg active ${type}`;
+
+  if (selectedOrigin.stop_idx === selectedDest.stop_idx) {
+    showStatus('Origin and destination are the same', 'error');
+    return;
+  }
+
+  const time = document.getElementById('time').value;
+  showStatus('Planning route...', 'info');
+
+  try {
+    const res = await fetch(
+      `/api/plan?origin=${selectedOrigin.stop_idx}&dest=${selectedDest.stop_idx}&time=${time}`
+    );
+    if (!res.ok) throw new Error(await res.text());
+
+    const plan = await res.json();
+    lastPlanData = plan;
+    renderResult(plan);
+    renderRouteOnMap(plan);
+    showStatus('Route planned successfully', 'success');
+  } catch (err) {
+    showStatus('No route found for this journey', 'error');
+    console.error(err);
+  }
 }
 
-function renderJourneyPlan(data) {
-  const container = document.getElementById('results-view');
-  if (!data) {
-    container.innerHTML = '';
-    return;
-  }
+function showStatus(msg, type) {
+  const el = document.getElementById('status-msg');
+  el.textContent = msg;
+  el.className = `status-msg active ${type}`;
+}
 
-  const legsHtml = data.legs.map(leg => {
-    if (leg.type === 'transit') {
-      return `
-        <div class="leg-item transit">
-          <div class="leg-track" style="background:${leg.color}"></div>
-          <div class="leg-node" style="border-color:${leg.color}"></div>
-          <div class="leg-content">
-            <div class="leg-header">
-              <span class="route-badge" style="background:${leg.color}">${leg.route}</span>
-              <span class="leg-title">${leg.mode} · ${leg.line_name}</span>
-            </div>
-            <div class="stop-row">
-              <strong>${leg.board_stop}</strong>
-              <span class="stop-time">${leg.board_time}</span>
-            </div>
-            <div style="font-size:11px;color:#94a3b8;margin:2px 0;">↓</div>
-            <div class="stop-row">
-              <strong>${leg.alight_stop}</strong>
-              <span class="stop-time">${leg.alight_time}</span>
-            </div>
-          </div>
-        </div>
-      `;
-    } else {
-      return `
-        <div class="leg-item walk">
-          <div class="leg-track"></div>
-          <div class="leg-node" style="border-color:var(--walk)"></div>
-          <div class="leg-content">
-            <div class="leg-header">
-              <span class="leg-title">🚶 Walk · ${leg.walk_minutes} min</span>
-            </div>
-            <div class="stop-row" style="color:#64748b;font-size:13px;">
-              ${leg.from_stop} → ${leg.to_stop}
-            </div>
-          </div>
-        </div>
-      `;
-    }
-  }).join('');
-
-  container.innerHTML = `
+function renderResult(plan) {
+  const html = `
     <div class="result-card">
       <div class="summary-metrics">
         <div class="metric-box">
-          <div class="metric-val">${data.duration_minutes}m</div>
-          <div class="metric-lbl">Total Time</div>
+          <div class="metric-val">${plan.duration_minutes}</div>
+          <div class="metric-lbl">Minutes</div>
         </div>
         <div class="metric-box">
-          <div class="metric-val">${data.transfers}</div>
+          <div class="metric-val">${plan.transfers}</div>
           <div class="metric-lbl">Transfers</div>
         </div>
         <div class="metric-box">
-          <div class="metric-val">${data.departure_time}</div>
+          <div class="metric-val">${plan.departure_time}</div>
           <div class="metric-lbl">Depart</div>
         </div>
         <div class="metric-box">
-          <div class="metric-val">${data.arrival_time}</div>
+          <div class="metric-val">${plan.arrival_time}</div>
           <div class="metric-lbl">Arrive</div>
         </div>
       </div>
 
       <div class="route-actions">
-        <button class="btn-save-fav" id="btn-save-fav">
-          ⭐ Save to Favourites
-        </button>
+        <button class="btn-save-fav" id="btn-save-fav-result">Save Route</button>
+        <button class="btn-download-route" id="btn-download-route">Download Route</button>
       </div>
 
       <div class="journey-timeline">
-        ${legsHtml}
+        ${plan.legs.map((leg, i) => {
+          if (leg.type === 'transit') {
+            return `
+              <div class="leg-item">
+                <div class="leg-track" style="background:${leg.color}"></div>
+                <div class="leg-node"></div>
+                <div class="leg-content">
+                  <div class="leg-header">
+                    <span class="route-badge" style="background:${leg.color}">${leg.route}</span>
+                    <span class="leg-title">${leg.mode}</span>
+                  </div>
+                  <div class="stop-row">
+                    <strong>${leg.line_name}</strong>
+                    <span class="stop-time">${leg.board_time} → ${leg.alight_time}</span>
+                  </div>
+                  <div class="stop-row">
+                    <small>${leg.board_stop}</small>
+                  </div>
+                  <div class="stop-row">
+                    <small>→ ${leg.alight_stop}</small>
+                  </div>
+                </div>
+              </div>
+            `;
+          } else {
+            return `
+              <div class="leg-item walk">
+                <div class="leg-track"></div>
+                <div class="leg-node"></div>
+                <div class="leg-content">
+                  <div class="leg-header">
+                    <span class="leg-title">Walk</span>
+                  </div>
+                  <div class="stop-row">
+                    <small>${leg.from_stop}</small>
+                  </div>
+                  <div class="stop-row">
+                    <small>→ ${leg.to_stop} (${leg.walk_minutes} min)</small>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+        }).join('')}
       </div>
     </div>
   `;
 
-  document.getElementById('btn-save-fav').addEventListener('click', async () => {
-    if (!selectedOrigin || !selectedDest) return;
-    const label = prompt('Enter a nickname for this route (optional):', `${selectedOrigin.name} → ${selectedDest.name}`) || '';
-    try {
-      await fetch('/api/favourites', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          origin_idx: selectedOrigin.stop_idx,
-          dest_idx: selectedDest.stop_idx,
-          label: label
-        })
-      });
-      const btn = document.getElementById('btn-save-fav');
-      btn.textContent = '✅ Saved in Favourites';
-      loadFavouritesList();
-    } catch (err) {
-      alert('Failed to save route to favourites.');
-    }
-  });
+  const view = document.getElementById('results-view');
+  view.innerHTML = html;
+
+  document.getElementById('btn-save-fav-result').addEventListener('click', () => saveFav(plan));
+  document.getElementById('btn-download-route').addEventListener('click', () => downloadRoute(plan));
 }
 
-document.getElementById('btn-plan').addEventListener('click', async () => {
-  if (!selectedOrigin) {
-    showStatus('Please select a valid origin stop from the suggestions.', 'error');
-    return;
-  }
-  if (!selectedDest) {
-    showStatus('Please select a valid destination stop from the suggestions.', 'error');
-    return;
-  }
+function downloadRoute(plan) {
+  const content = `Delhi Transit Route Plan
+========================
 
-  const timeVal = document.getElementById('time').value || '09:00';
-  showStatus('Computing optimal transit itinerary…', 'info');
-  renderJourneyPlan(null);
-  clearRouteLayers();
+Origin: ${plan.origin}
+Destination: ${plan.destination}
 
+Journey Details
+===============
+Departure Time: ${plan.departure_time}
+Arrival Time: ${plan.arrival_time}
+Total Duration: ${plan.duration_minutes} minutes
+Number of Transfers: ${plan.transfers}
+
+Route:
+------
+${plan.legs.map((leg, i) => {
+  if (leg.type === 'transit') {
+    return `
+${i + 1}. ${leg.mode.toUpperCase()} - ${leg.line_name} (Route ${leg.route})
+   Board at: ${leg.board_stop} (${leg.board_time})
+   Alight at: ${leg.alight_stop} (${leg.alight_time})
+`;
+  } else {
+    return `
+${i + 1}. WALK
+   From: ${leg.from_stop}
+   To: ${leg.to_stop}
+   Duration: ${leg.walk_minutes} minutes
+`;
+  }
+}).join('')}
+
+Generated by Delhi Transit
+https://delhi-route-recommender--sejalpandey30.replit.app
+`;
+
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Delhi-Transit-Route-${new Date().toISOString().split('T')[0]}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function saveFav(plan) {
   try {
-    const params = new URLSearchParams({
-      origin: selectedOrigin.stop_idx,
-      dest: selectedDest.stop_idx,
-      time: timeVal
+    await fetch('/api/favourites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        origin_idx: selectedOrigin.stop_idx,
+        dest_idx: selectedDest.stop_idx,
+        label: `${plan.origin} → ${plan.destination}`
+      })
     });
-
-    const res = await fetch('/api/plan?' + params.toString());
-    const data = await res.json();
-
-    if (!res.ok) {
-      showStatus(data.error || 'No route found between these points.', 'error');
-      return;
-    }
-
-    showStatus(`${data.origin} → ${data.destination}`, 'success');
-    renderJourneyPlan(data);
-    renderRouteOnMap(data);
-    loadHistoryList();
+    showStatus('Route saved to favorites', 'success');
+    loadFavouries();
   } catch (err) {
-    showStatus('Network connection error while computing itinerary.', 'error');
+    showStatus('Failed to save route', 'error');
   }
+}
+
+document.getElementById('btn-plan').addEventListener('click', planRoute);
+document.getElementById('time').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') planRoute();
 });
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   4. TABS, HISTORY & FAVOURITES (SQLITE-BACKED)
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════[...]
+   4. HISTORY & FAVOURITES
+   ════════════════════════════════════════════════════════════════[...]
+async function loadHistory() {
+  try {
+    const res = await fetch('/api/history');
+    const history = await res.json();
+    const list = document.getElementById('history-list');
+    if (!history.length) {
+      list.innerHTML = '<div class="empty-state">No search history yet.</div>';
+      return;
+    }
+    list.innerHTML = history.map(h => `
+      <div class="list-row">
+        <div class="list-row-info">
+          <div class="list-row-route">${h.origin_name} → ${h.dest_name}</div>
+          <div class="list-row-meta">${h.duration_min} min | ${h.transfers} transfer(s)</div>
+        </div>
+        <button class="btn-delete-row" data-id="${h.id}" title="Delete">×</button>
+      </div>
+    `).join('');
+    list.querySelectorAll('.btn-delete-row').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fetch(`/api/history/${btn.dataset.id}`, { method: 'DELETE' });
+        loadHistory();
+      });
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadFavouries() {
+  try {
+    const res = await fetch('/api/favourites');
+    const favs = await res.json();
+    const list = document.getElementById('fav-list');
+    if (!favs.length) {
+      list.innerHTML = '<div class="empty-state">No favourite routes saved yet.</div>';
+      return;
+    }
+    list.innerHTML = favs.map(f => `
+      <div class="list-row">
+        <div class="list-row-info">
+          <div class="list-row-route">${f.origin_name} → ${f.dest_name}</div>
+          <div class="list-row-meta">${f.label || 'Saved route'}</div>
+        </div>
+        <button class="btn-delete-row" data-id="${f.id}" title="Delete">×</button>
+      </div>
+    `).join('');
+    list.querySelectorAll('.btn-delete-row').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await fetch(`/api/favourites/${btn.dataset.id}`, { method: 'DELETE' });
+        loadFavouries();
+      });
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
-    document.getElementById('pane-' + btn.dataset.tab).classList.add('active');
+    document.getElementById(`pane-${btn.dataset.tab}`).classList.add('active');
+    if (btn.dataset.tab === 'history') loadHistory();
+    if (btn.dataset.tab === 'favs') loadFavouries();
   });
 });
 
-function formatTimeAgo(epochSec) {
-  const diff = Math.floor(Date.now() / 1000) - epochSec;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
-}
-
-async function loadHistoryList() {
-  try {
-    const res = await fetch('/api/history');
-    const items = await res.json();
-    const container = document.getElementById('history-list');
-
-    if (!items.length) {
-      container.innerHTML = '<div class="empty-state">No search history yet.</div>';
-      return;
-    }
-
-    container.innerHTML = items.map(item => `
-      <div class="list-row" data-oi="${item.origin_idx}" data-di="${item.dest_idx}" data-on="${item.origin_name.replace(/"/g, '&quot;')}" data-dn="${item.dest_name.replace(/"/g, '&quot;')}">
-        <div class="list-row-info">
-          <div class="list-row-route">${item.origin_name} → ${item.dest_name}</div>
-          <div class="list-row-meta">${item.duration_min} min · ${item.transfers} transfer${item.transfers === 1 ? '' : 's'} · ${formatTimeAgo(item.searched_at)}</div>
-        </div>
-        <button class="btn-delete-row" data-del="hist" data-id="${item.id}" title="Remove">✕</button>
-      </div>
-    `).join('');
-
-    container.querySelectorAll('.list-row').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.dataset.del) return;
-        executeReplan(row.dataset.oi, row.dataset.di, row.dataset.on, row.dataset.dn);
-      });
-    });
-
-    container.querySelectorAll('[data-del="hist"]').forEach(delBtn => {
-      delBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await fetch('/api/history/' + delBtn.dataset.id, { method: 'DELETE' });
-        loadHistoryList();
-      });
-    });
-  } catch (err) {}
-}
-
 document.getElementById('btn-clear-history').addEventListener('click', async () => {
-  if (!confirm('Clear all search history?')) return;
   await fetch('/api/history/clear', { method: 'DELETE' });
-  loadHistoryList();
+  loadHistory();
 });
 
-async function loadFavouritesList() {
-  try {
-    const res = await fetch('/api/favourites');
-    const items = await res.json();
-    const container = document.getElementById('fav-list');
-
-    if (!items.length) {
-      container.innerHTML = '<div class="empty-state">No favourite routes saved yet.</div>';
-      return;
-    }
-
-    container.innerHTML = items.map(item => `
-      <div class="list-row" data-oi="${item.origin_idx}" data-di="${item.dest_idx}" data-on="${item.origin_name.replace(/"/g, '&quot;')}" data-dn="${item.dest_name.replace(/"/g, '&quot;')}">
-        <div class="list-row-info">
-          <div class="list-row-route">⭐ ${item.label || (item.origin_name + ' → ' + item.dest_name)}</div>
-          <div class="list-row-meta">${item.origin_name} → ${item.dest_name}</div>
-        </div>
-        <button class="btn-delete-row" data-del="fav" data-id="${item.id}" title="Remove">✕</button>
-      </div>
-    `).join('');
-
-    container.querySelectorAll('.list-row').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.dataset.del) return;
-        executeReplan(row.dataset.oi, row.dataset.di, row.dataset.on, row.dataset.dn);
-      });
-    });
-
-    container.querySelectorAll('[data-del="fav"]').forEach(delBtn => {
-      delBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await fetch('/api/favourites/' + delBtn.dataset.id, { method: 'DELETE' });
-        loadFavouritesList();
-      });
-    });
-  } catch (err) {}
-}
-
-function executeReplan(origIdx, destIdx, origName, destName) {
-  selectedOrigin = { stop_idx: parseInt(origIdx, 10), name: origName };
-  selectedDest = { stop_idx: parseInt(destIdx, 10), name: destName };
-  document.getElementById('origin').value = origName;
-  document.getElementById('dest').value = destName;
-  document.getElementById('btn-plan').click();
-}
-
-/* ── Initial Load ── */
-loadHistoryList();
-loadFavouritesList();
+loadHistory();
+loadFavouries();
 </script>
+
 </body>
 </html>
